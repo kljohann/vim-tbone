@@ -310,7 +310,7 @@ function! tbone#pane_id(target) abort
   return matchstr(output, '%\d\+\ze '.offset.'\>')
 endfunction
 
-function! tbone#send_keys(target, keys) abort
+function! tbone#send_keys(target, ...) abort
   if empty(a:target)
     return ['', 'echoerr '.string('Target pane required')]
   endif
@@ -322,19 +322,26 @@ function! tbone#send_keys(target, keys) abort
     return ['', 'echoerr '.string('Refusing to write to own tmux pane')]
   endif
 
-  if len(a:keys) > 1000
-    let temp = tempname()
-    call writefile(split(a:keys, "\r", 1), temp, 'b')
-    let out = system('tmux load-buffer '.temp.' \; paste-buffer -d -t '.pane_id)
-  else
-    let out = system('tmux send-keys -t '.pane_id.' "" '.shellescape(a:keys))
-  endif
+  for keys in a:000
+    if type(keys) == type([])
+      let out = system('tmux send-keys -t '.pane_id.' "" '.
+        \ join(map(copy(keys), 'shellescape(v:val)')))
+    elseif len(keys) > 1000
+      let temp = tempname()
+      call writefile(split(keys, "\r", 1), temp, 'b')
+      let out = system('tmux load-buffer '.temp.' \; paste-buffer -d -t '.pane_id)
+    else
+      let out = system('tmux send-keys -l -t '.pane_id.' "" '.shellescape(keys))
+    endif
 
-  if v:shell_error
-    return ['', 'echoerr '.string('tmux: '.out[0:-2])]
-  endif
+    if v:shell_error
+      return ['', 'echoerr '.string('tmux: '.out[0:-2])]
+    endif
 
-  echo len(a:keys).' keys sent to '.pane_id
+    echo len(keys).' keys sent to '.pane_id
+    unlet keys
+  endfor
+
   return [pane_id, '']
 endf
 
